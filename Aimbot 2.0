@@ -1,0 +1,249 @@
+-- AIMBOT CONFIG | PC & MOBILE | STABLE
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+local Window = Rayfield:CreateWindow({
+	Name = "aimbot config",
+	LoadingTitle = "aimbot config",
+	LoadingSubtitle = "PC & Mobile",
+	ConfigurationSaving = {Enabled = false}
+})
+
+-- SERVICES
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+-- MOBILE CHECK
+local IsMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+
+-- STATES
+local AimbotEnabled = false
+local SmoothEnabled = false
+local SmoothPower = 0.15
+local Holding = false
+
+-- FOV
+local FOVEnabled = true
+local FOVRadius = 120
+local FOVColor = Color3.fromRGB(255,255,255)
+
+-- ESP
+local ESPEnabled = false
+local ESPColor = Color3.fromRGB(255,0,0)
+local ESPObjects = {}
+
+-- INPUT PC
+UserInputService.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton2 then
+		Holding = true
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton2 then
+		Holding = false
+	end
+end)
+
+-- ======================
+-- FOV GUI
+-- ======================
+local gui = Instance.new("ScreenGui", game.CoreGui)
+gui.Name = "FOV_GUI"
+
+local circle = Instance.new("Frame", gui)
+circle.AnchorPoint = Vector2.new(0.5,0.5)
+circle.Position = UDim2.fromScale(0.5,0.5)
+circle.Size = UDim2.fromOffset(FOVRadius*2, FOVRadius*2)
+circle.BackgroundTransparency = 1
+
+local stroke = Instance.new("UIStroke", circle)
+stroke.Thickness = 2
+stroke.Color = FOVColor
+
+local corner = Instance.new("UICorner", circle)
+corner.CornerRadius = UDim.new(1,0)
+
+-- ======================
+-- FUNCTIONS
+-- ======================
+local function Center()
+	local v = Camera.ViewportSize
+	return Vector2.new(v.X/2, v.Y/2)
+end
+
+-- WALL CHECK
+local function CanSee(char)
+	if not char or not char:FindFirstChild("Head") then return false end
+
+	local origin = Camera.CFrame.Position
+	local dir = char.Head.Position - origin
+
+	local params = RaycastParams.new()
+	params.FilterDescendantsInstances = {LocalPlayer.Character}
+	params.FilterType = Enum.RaycastFilterType.Blacklist
+
+	local ray = Workspace:Raycast(origin, dir, params)
+	return ray and ray.Instance:IsDescendantOf(char)
+end
+
+local function ClosestPlayer()
+	local best, dist = nil, math.huge
+	for _,p in pairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+			local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
+			if vis then
+				local mag = (Vector2.new(pos.X,pos.Y) - Center()).Magnitude
+				if mag < dist and mag <= FOVRadius and CanSee(p.Character) then
+					dist = mag
+					best = p
+				end
+			end
+		end
+	end
+	return best
+end
+
+local function Aim(pos)
+	if SmoothEnabled then
+		TweenService:Create(
+			Camera,
+			TweenInfo.new(SmoothPower, Enum.EasingStyle.Linear),
+			{CFrame = CFrame.new(Camera.CFrame.Position, pos)}
+		):Play()
+	else
+		Camera.CFrame = CFrame.new(Camera.CFrame.Position, pos)
+	end
+end
+
+-- ======================
+-- ESP
+-- ======================
+local function ClearESP(p)
+	if ESPObjects[p] then
+		ESPObjects[p]:Destroy()
+		ESPObjects[p] = nil
+	end
+end
+
+local function CreateESP(p)
+	if p.Character and p.Character:FindFirstChild("Head") then
+		local box = Instance.new("BoxHandleAdornment")
+		box.Size = Vector3.new(4,6,2)
+		box.Color3 = ESPColor
+		box.Transparency = 0.5
+		box.AlwaysOnTop = true
+		box.Adornee = p.Character
+		box.Parent = gui
+		ESPObjects[p] = box
+	end
+end
+
+RunService.RenderStepped:Connect(function()
+	-- FOV
+	circle.Visible = FOVEnabled
+	circle.Size = UDim2.fromOffset(FOVRadius*2, FOVRadius*2)
+	stroke.Color = FOVColor
+
+	-- AIMBOT
+	if AimbotEnabled and (IsMobile or Holding) then
+		local target = ClosestPlayer()
+		if target and target.Character then
+			Aim(target.Character.Head.Position)
+		end
+	end
+
+	-- ESP UPDATE
+	for _,p in pairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer then
+			if ESPEnabled and p.Character and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+				if not ESPObjects[p] then
+					CreateESP(p)
+				end
+			else
+				ClearESP(p)
+			end
+		end
+	end
+end)
+
+-- ======================
+-- UI
+-- ======================
+local AimbotTab = Window:CreateTab("aimbot")
+local ESPTab = Window:CreateTab("esp")
+
+-- AIMBOT TAB
+AimbotTab:CreateToggle({
+	Name = "Ativar Aimbot",
+	Callback = function(v)
+		AimbotEnabled = v
+	end
+})
+
+AimbotTab:CreateToggle({
+	Name = "Smooth Aim",
+	Callback = function(v)
+		SmoothEnabled = v
+	end
+})
+
+AimbotTab:CreateSlider({
+	Name = "Força do Smooth",
+	Range = {0.05,0.5},
+	Increment = 0.05,
+	CurrentValue = SmoothPower,
+	Callback = function(v)
+		SmoothPower = v
+	end
+})
+
+AimbotTab:CreateToggle({
+	Name = "Mostrar FOV",
+	CurrentValue = true,
+	Callback = function(v)
+		FOVEnabled = v
+	end
+})
+
+AimbotTab:CreateSlider({
+	Name = "Tamanho do FOV",
+	Range = {50,400},
+	Increment = 10,
+	CurrentValue = FOVRadius,
+	Callback = function(v)
+		FOVRadius = v
+	end
+})
+
+AimbotTab:CreateColorPicker({
+	Name = "Cor do FOV",
+	Color = FOVColor,
+	Callback = function(c)
+		FOVColor = c
+	end
+})
+
+-- ESP TAB
+ESPTab:CreateToggle({
+	Name = "ESP Jogadores",
+	Callback = function(v)
+		ESPEnabled = v
+	end
+})
+
+ESPTab:CreateColorPicker({
+	Name = "Cor do ESP",
+	Color = ESPColor,
+	Callback = function(c)
+		ESPColor = c
+		for _,e in pairs(ESPObjects) do
+			e.Color3 = c
+		end
+	end
+})
